@@ -23,8 +23,14 @@ type Database interface {
 	Delete(context.Context, string) error
 }
 
+type databaseConn interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+	Query(ctx context.Context, sql string, optionsAndArgs ...interface{}) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, optionsAndArgs ...interface{}) pgx.Row
+}
+
 type MovieDatabase struct {
-	pool *pgxpool.Pool
+	pool databaseConn
 }
 
 func (mdb MovieDatabase) Get(ctx context.Context, id string) (*Movie, error) {
@@ -55,13 +61,20 @@ func (mdb MovieDatabase) GetAll(ctx context.Context) ([]Movie, error) {
 	return movies, nil
 }
 
-func (mdb MovieDatabase) Insert(ctx context.Context, movie *Movie) (string, error) {
+func (mdb MovieDatabase) Insert(ctx context.Context, movie *Movie) (id string, err error) {
 	tx, err := mdb.pool.Begin(context.Background())
 	if err != nil {
-		return "", err
+		return
 	}
 
-	defer tx.Rollback(ctx)
+	defer func() {
+		switch err {
+		case nil:
+			err = tx.Commit(ctx)
+		default:
+			err = tx.Rollback(ctx)
+		}
+	}()
 
 	q := `
 	insert into movie(name, release_year, rating, genres, director)
@@ -78,43 +91,41 @@ func (mdb MovieDatabase) Insert(ctx context.Context, movie *Movie) (string, erro
 		movie.Director,
 	)
 	if err != nil {
-		return "", err
+		return
 	}
 	defer rows.Close()
 
-	id, err := pgx.CollectExactlyOneRow(rows, pgx.RowTo[uuid.UUID])
+	movieId, err := pgx.CollectExactlyOneRow(rows, pgx.RowTo[uuid.UUID])
 	if err != nil {
-		return "", err
+		return
 	}
-
-	err = tx.Commit(ctx)
-	if err != nil {
-		return "", err
-	}
-	return id.String(), nil
+	return movieId.String(), nil
 }
-func (mdb MovieDatabase) Update(ctx context.Context, id string, movie *Movie) error {
+func (mdb MovieDatabase) Update(ctx context.Context, id string, movie *Movie) (err error) {
 	tx, err := mdb.pool.Begin(context.Background())
 	if err != nil {
-		return err
+		return
 	}
 
-	defer tx.Rollback(ctx)
+	defer func() {
+		switch err {
+		case nil:
+			err = tx.Commit(ctx)
+		default:
+			err = tx.Rollback(ctx)
+		}
+	}()
 
 	q, params := mdb.buildUpdateQuery(movie, id)
 	ct, err := tx.Exec(context.Background(), q, params...)
 	if err != nil {
-		return err
+		return
 	}
 
 	if ct.RowsAffected() == 0 {
 		return fmt.Errorf("entity with such id does not exist")
 	}
 
-	err = tx.Commit(ctx)
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -123,7 +134,6 @@ func (mdb MovieDatabase) buildUpdateQuery(movie *Movie, id string) (string, []an
 	params := []any{}
 	counter := 1
 
-	fmt.Println(movie)
 	if movie.Name != "" {
 		addToQuery(movie.Name, "name", &counter, &statements, &params)
 	}
@@ -145,9 +155,7 @@ func (mdb MovieDatabase) buildUpdateQuery(movie *Movie, id string) (string, []an
 	}
 
 	params = append(params, id)
-	fmt.Println(params)
 	q := fmt.Sprintf("update movie set %s where id = $%d", strings.Join(statements, " "), counter)
-	fmt.Println(q)
 	return q, params
 }
 
@@ -163,27 +171,30 @@ func addToQuery[T any](
 	*counter++
 }
 
-func (mdb MovieDatabase) Delete(ctx context.Context, id string) error {
+func (mdb MovieDatabase) Delete(ctx context.Context, id string) (err error) {
 	tx, err := mdb.pool.Begin(ctx)
 	if err != nil {
-		return err
+		return
 	}
 
-	defer tx.Rollback(ctx)
+	defer func() {
+		switch err {
+		case nil:
+			err = tx.Commit(ctx)
+		default:
+			err = tx.Rollback(ctx)
+		}
+	}()
 
 	ct, err := tx.Exec(ctx, "delete from movie where id = $1", id)
 	if err != nil {
-		return err
+		return
 	}
 
 	if ct.RowsAffected() == 0 {
 		return fmt.Errorf("entity with such id does not exist")
 	}
 
-	err = tx.Commit(ctx)
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
