@@ -5,16 +5,31 @@ import (
 	"fmt"
 )
 
+// Service is responsible for to fetching/passing data.
 type Service interface {
-	GetMovie(context.Context, string) (*Movie, error)
-	GetAllMovies(context.Context) ([]Movie, error)
-	CreateMovie(context.Context, *Movie) (string, error)
-	UpdateMovie(context.Context, string, *Movie) error
-	DeleteMovie(context.Context, string) error
+	// GetMovie fetches movie using provided id.
+	GetMovie(ctx context.Context, id string) (*Movie, error)
+	// GetAllMovies fetches all stored movies using provided id.
+	GetAllMovies(ctx context.Context) ([]Movie, error)
+	// CreateMovie creates movie using provided Movie struct.
+	CreateMovie(ctx context.Context, movie *Movie) (string, error)
+	// UpdateMovie updates movie with provided id using provided Movie struct.
+	UpdateMovie(ctx context.Context, id string, movie *Movie) error
+	// DeleteMovie deletes movie with provided id.
+	DeleteMovie(ctx context.Context, id string) error
 }
 
+// MovieService is struct implementing Service interface.
 type MovieService struct {
+	// MovieService uses db interface, to fetch from or pass to the connected database.
 	db Database
+}
+
+// NewServer creates an instance of the MovieService.
+func NewMovieService(db Database) Service {
+	return MovieService{
+		db: db,
+	}
 }
 
 func (ms MovieService) GetMovie(ctx context.Context, id string) (*Movie, error) {

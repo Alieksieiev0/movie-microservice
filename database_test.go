@@ -14,7 +14,7 @@ func TestGet(t *testing.T) {
 	mock := testPoolMock(t)
 	defer mock.Close()
 	id := testUUID(t)
-	mdb := MovieDatabase{mock}
+	mdb := NewMovieDatabase(mock)
 
 	rows := pgxmock.NewRows(testMovieColumn()).AddRow(testMovieRow(id)...)
 	mock.ExpectQuery("select *").WithArgs(id.String()).WillReturnRows(rows)
@@ -30,7 +30,7 @@ func TestGet(t *testing.T) {
 func TestGetAll(t *testing.T) {
 	mock := testPoolMock(t)
 	defer mock.Close()
-	mdb := MovieDatabase{mock}
+	mdb := NewMovieDatabase(mock)
 
 	rows := pgxmock.NewRows(testMovieColumn())
 	values := [][]any{}
@@ -58,7 +58,7 @@ func TestInsert(t *testing.T) {
 	mock := testPoolMock(t)
 	defer mock.Close()
 	id := testUUID(t)
-	mdb := MovieDatabase{mock}
+	mdb := NewMovieDatabase(mock)
 
 	rows := mock.NewRows([]string{"id"}).AddRow(id)
 	value := testMovieRow(id)[1:]
@@ -79,7 +79,7 @@ func TestUpdate(t *testing.T) {
 	mock := testPoolMock(t)
 	defer mock.Close()
 	id := testUUID(t)
-	mdb := MovieDatabase{mock}
+	mdb := NewMovieDatabase(mock)
 
 	movie := &Movie{Name: "updateTest"}
 	mock.ExpectBegin()
@@ -129,7 +129,7 @@ func TestDelete(t *testing.T) {
 	mock := testPoolMock(t)
 	defer mock.Close()
 	id := testUUID(t)
-	mdb := MovieDatabase{mock}
+	mdb := NewMovieDatabase(mock)
 
 	mock.ExpectBegin()
 	mock.ExpectExec("delete from movie").

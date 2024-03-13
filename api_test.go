@@ -19,7 +19,7 @@ func TestHandleGetMovie(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, fmt.Sprintf("/movies/%v", id), nil)
 	r.SetPathValue("id", id.String())
-	s := Server{MovieService{MovieDatabase{mock}}}
+	s := NewServer(NewMovieService(NewMovieDatabase(mock)))
 
 	rows := pgxmock.NewRows(testMovieColumn()).AddRow(testMovieRow(id)...)
 	mock.ExpectQuery("select *").WithArgs(id.String()).WillReturnRows(rows)
@@ -42,7 +42,7 @@ func TestHandleGetAllMovies(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/movies", nil)
-	s := Server{MovieService{MovieDatabase{mock}}}
+	s := NewServer(NewMovieService(NewMovieDatabase(mock)))
 
 	rows := pgxmock.NewRows(testMovieColumn())
 	values := [][]any{}
@@ -80,7 +80,7 @@ func TestHandleCreateMovie(t *testing.T) {
 	}
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/movies", &buf)
-	s := Server{MovieService{MovieDatabase{mock}}}
+	s := NewServer(NewMovieService(NewMovieDatabase(mock)))
 
 	rows := mock.NewRows([]string{"id"}).AddRow(id)
 	value := testMovieRow(id)[1:]
@@ -114,7 +114,7 @@ func TestHandleUpdateMovie(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPut, fmt.Sprintf("/movies/%v", id), &buf)
 	r.SetPathValue("id", id.String())
-	s := Server{MovieService{MovieDatabase{mock}}}
+	s := NewServer(NewMovieService(NewMovieDatabase(mock)))
 
 	mock.ExpectBegin()
 	mock.ExpectExec("update movie").
@@ -141,7 +141,7 @@ func TestHandleDeleteMovie(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodDelete, fmt.Sprintf("/movies/%v", id), nil)
 	r.SetPathValue("id", id.String())
-	s := Server{MovieService{MovieDatabase{mock}}}
+	s := NewServer(NewMovieService(NewMovieDatabase(mock)))
 
 	mock.ExpectBegin()
 	mock.ExpectExec("delete from movie").

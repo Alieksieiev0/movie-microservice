@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/joho/godotenv"
 )
@@ -17,7 +18,9 @@ func main() {
 	}
 	defer pool.Close()
 
-	s := Server{MovieService{MovieDatabase{pool}}}
+	logger := log.New(os.Stdout, "SERVICE INFO: ", log.LstdFlags)
+	loggingService := NewLoggingService(logger, NewMovieService(NewMovieDatabase(pool)))
+	s := NewServer(loggingService)
 	err = s.Start(":3000")
 	if err != nil {
 		log.Fatal(err)

@@ -12,29 +12,45 @@ import (
 	pgxdecimal "github.com/jackc/pgx-shopspring-decimal"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/tracelog"
 	"github.com/shopspring/decimal"
 )
 
+// Database is responsible for providing database CRUD interface.
 type Database interface {
-	Get(context.Context, string) (*Movie, error)
-	GetAll(context.Context) ([]Movie, error)
-	Insert(context.Context, *Movie) (string, error)
-	Update(context.Context, string, *Movie) error
-	Delete(context.Context, string) error
+	// Get fetches movie from the DB using provided id.
+	Get(ctx context.Context, id string) (*Movie, error)
+	// GetAllMovies fetches all movies stored in DB using provided id.
+	GetAll(ctx context.Context) ([]Movie, error)
+	// CreateMovie creates movie row in DB using provided Movie struct.
+	Insert(ctx context.Context, movie *Movie) (string, error)
+	// UpdateMovie updates movie row in DB with provided id using provided Movie struct.
+	Update(ctx context.Context, id string, movie *Movie) error
+	// DeleteMovie deletes movie row from DB with provided id.
+	Delete(ctx context.Context, id string) error
 }
 
+// databaseConn is responsible for providing methods for communicating with DB.
 type databaseConn interface {
 	Begin(ctx context.Context) (pgx.Tx, error)
 	Query(ctx context.Context, sql string, optionsAndArgs ...interface{}) (pgx.Rows, error)
 	QueryRow(ctx context.Context, sql string, optionsAndArgs ...interface{}) pgx.Row
 }
 
+// MovieDatabase is a struct implementing Database interface.
 type MovieDatabase struct {
-	pool databaseConn
+	conn databaseConn
+}
+
+// NewMovieDatabase creates an instance of the MovieDatabase.
+func NewMovieDatabase(conn databaseConn) Database {
+	return MovieDatabase{
+		conn: conn,
+	}
 }
 
 func (mdb MovieDatabase) Get(ctx context.Context, id string) (*Movie, error) {
-	rows, err := mdb.pool.Query(ctx, "select * from movie where id = $1", id)
+	rows, err := mdb.conn.Query(ctx, "select * from movie where id = $1", id)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +64,7 @@ func (mdb MovieDatabase) Get(ctx context.Context, id string) (*Movie, error) {
 }
 
 func (mdb MovieDatabase) GetAll(ctx context.Context) ([]Movie, error) {
-	rows, err := mdb.pool.Query(ctx, "select * from movie")
+	rows, err := mdb.conn.Query(ctx, "select * from movie")
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +78,7 @@ func (mdb MovieDatabase) GetAll(ctx context.Context) ([]Movie, error) {
 }
 
 func (mdb MovieDatabase) Insert(ctx context.Context, movie *Movie) (id string, err error) {
-	tx, err := mdb.pool.Begin(context.Background())
+	tx, err := mdb.conn.Begin(context.Background())
 	if err != nil {
 		return
 	}
@@ -102,7 +118,7 @@ func (mdb MovieDatabase) Insert(ctx context.Context, movie *Movie) (id string, e
 	return movieId.String(), nil
 }
 func (mdb MovieDatabase) Update(ctx context.Context, id string, movie *Movie) (err error) {
-	tx, err := mdb.pool.Begin(context.Background())
+	tx, err := mdb.conn.Begin(context.Background())
 	if err != nil {
 		return
 	}
@@ -133,6 +149,8 @@ func (mdb MovieDatabase) Update(ctx context.Context, id string, movie *Movie) (e
 	return nil
 }
 
+// buildUpdateQuery dynamically adds statements into the query string for fields
+// with values different from types zero values.
 func (mdb MovieDatabase) buildUpdateQuery(movie *Movie, id string) (string, []any, error) {
 	statements := []string{}
 	params := []any{}
@@ -172,6 +190,8 @@ func (mdb MovieDatabase) buildUpdateQuery(movie *Movie, id string) (string, []an
 	return q, params, nil
 }
 
+// addToQuery dynamically appends statements and params with provided name and field,
+// increasing the counter of added statements.
 func addToQuery[T any](
 	field T,
 	name string,
@@ -185,7 +205,7 @@ func addToQuery[T any](
 }
 
 func (mdb MovieDatabase) Delete(ctx context.Context, id string) (err error) {
-	tx, err := mdb.pool.Begin(ctx)
+	tx, err := mdb.conn.Begin(ctx)
 	if err != nil {
 		return
 	}
@@ -211,10 +231,17 @@ func (mdb MovieDatabase) Delete(ctx context.Context, id string) (err error) {
 	return nil
 }
 
+// ConnectDB connects to the PostgreSql database, using provided DB url.
 func ConnectDB(dbUrl string) (*pgxpool.Pool, error) {
 	config, err := pgxpool.ParseConfig(os.Getenv(dbUrl))
 	if err != nil {
 		log.Fatalf("Unable to load database config: %v\n", err)
+	}
+
+	logger := log.New(os.Stdout, "SQL INFO: ", log.LstdFlags)
+	config.ConnConfig.Tracer = &tracelog.TraceLog{
+		Logger:   NewDatabaseLogger(logger),
+		LogLevel: tracelog.LogLevelTrace,
 	}
 	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
 		pgxuuid.Register(conn.TypeMap())
