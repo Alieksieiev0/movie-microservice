@@ -40,5 +40,15 @@ jobs:
       uses: docker/build-push-action@v5
       with:
         context: .
+        dockerfile: ./microservice.Dockerfile
         push: true
         tags: ${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}:latest
+    -
+      name: Build and push
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        dockerfile: ./db.Dockerfile
+        push: true
+        tags: ${{ secrets.DOCKER_USERNAME }}/${{ github.event.repository.name }}:latest
+
