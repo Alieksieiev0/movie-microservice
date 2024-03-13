@@ -11,17 +11,10 @@ import (
 )
 
 func TestGet(t *testing.T) {
-	mock, err := pgxmock.NewPool()
-	if err != nil {
-		t.Fatal(err)
-	}
+	mock := testPoolMock(t)
 	defer mock.Close()
-
+	id := testUUID(t)
 	mdb := MovieDatabase{mock}
-	id, err := uuid.NewV4()
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	rows := pgxmock.NewRows(testMovieColumn()).AddRow(testMovieRow(id)...)
 	mock.ExpectQuery("select *").WithArgs(id.String()).WillReturnRows(rows)
@@ -35,31 +28,24 @@ func TestGet(t *testing.T) {
 }
 
 func TestGetAll(t *testing.T) {
-	mock, err := pgxmock.NewPool()
-	if err != nil {
-		t.Fatal(err)
-	}
+	mock := testPoolMock(t)
 	defer mock.Close()
-
 	mdb := MovieDatabase{mock}
+
 	rows := pgxmock.NewRows(testMovieColumn())
 	values := [][]any{}
 	for i := 0; i < 10; i++ {
-		id, err := uuid.NewV4()
-		if err != nil {
-			t.Fatal(err)
-		}
-		values = append(values, testMovieRow(id))
+		values = append(values, testMovieRow(testUUID(t)))
 	}
-
 	rows.AddRows(values...)
+
 	mock.ExpectQuery("select *").WillReturnRows(rows)
 	movies, err := mdb.GetAll(context.Background())
 	if err != nil {
 		t.Errorf("error was not expected while querying: %s", err)
 	}
 
-	if len(movies) < 10 {
+	if len(movies) != 10 {
 		t.Fatal("incorrect number of entities was returned")
 	}
 
@@ -69,17 +55,11 @@ func TestGetAll(t *testing.T) {
 }
 
 func TestInsert(t *testing.T) {
-	mock, err := pgxmock.NewPool()
-	if err != nil {
-		t.Fatal(err)
-	}
+	mock := testPoolMock(t)
 	defer mock.Close()
-
+	id := testUUID(t)
 	mdb := MovieDatabase{mock}
-	id, err := uuid.NewV4()
-	if err != nil {
-		return
-	}
+
 	rows := mock.NewRows([]string{"id"}).AddRow(id)
 	value := testMovieRow(id)[1:]
 	mock.ExpectBegin()
@@ -96,17 +76,11 @@ func TestInsert(t *testing.T) {
 }
 
 func TestUpdate(t *testing.T) {
-	mock, err := pgxmock.NewPool()
-	if err != nil {
-		t.Fatal(err)
-	}
+	mock := testPoolMock(t)
 	defer mock.Close()
-
+	id := testUUID(t)
 	mdb := MovieDatabase{mock}
-	id, err := uuid.NewV4()
-	if err != nil {
-		return
-	}
+
 	movie := &Movie{Name: "updateTest"}
 	mock.ExpectBegin()
 	mock.ExpectExec("update movie").
@@ -124,12 +98,12 @@ func TestUpdate(t *testing.T) {
 }
 
 func TestBuildUpdateQuery(t *testing.T) {
-	id, err := uuid.NewV4()
-	if err != nil {
-		return
-	}
+	id := testUUID(t)
 	movie := testMovie()
-	q, params := MovieDatabase{}.buildUpdateQuery(movie, id.String())
+	q, params, err := MovieDatabase{}.buildUpdateQuery(movie, id.String())
+	if err != nil {
+		t.Errorf("error during building update query: %v", err)
+	}
 	if !strings.Contains(q, "name = $1") && params[0] != "test" {
 		t.Errorf("name was not appended to update query")
 	}
@@ -152,17 +126,11 @@ func TestBuildUpdateQuery(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	mock, err := pgxmock.NewPool()
-	if err != nil {
-		t.Fatal(err)
-	}
+	mock := testPoolMock(t)
 	defer mock.Close()
-
+	id := testUUID(t)
 	mdb := MovieDatabase{mock}
-	id, err := uuid.NewV4()
-	if err != nil {
-		return
-	}
+
 	mock.ExpectBegin()
 	mock.ExpectExec("delete from movie").
 		WithArgs(id.String()).
@@ -176,6 +144,22 @@ func TestDelete(t *testing.T) {
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("there were unfulfilled expectations: %s", err)
 	}
+}
+
+func testPoolMock(t *testing.T) pgxmock.PgxPoolIface {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return mock
+}
+
+func testUUID(t *testing.T) uuid.UUID {
+	id, err := uuid.NewV4()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
 }
 
 func testMovieColumn() []string {

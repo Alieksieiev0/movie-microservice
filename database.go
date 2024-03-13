@@ -116,7 +116,11 @@ func (mdb MovieDatabase) Update(ctx context.Context, id string, movie *Movie) (e
 		}
 	}()
 
-	q, params := mdb.buildUpdateQuery(movie, id)
+	q, params, err := mdb.buildUpdateQuery(movie, id)
+	if err != nil {
+		return
+	}
+
 	ct, err := tx.Exec(context.Background(), q, params...)
 	if err != nil {
 		return
@@ -129,7 +133,7 @@ func (mdb MovieDatabase) Update(ctx context.Context, id string, movie *Movie) (e
 	return nil
 }
 
-func (mdb MovieDatabase) buildUpdateQuery(movie *Movie, id string) (string, []any) {
+func (mdb MovieDatabase) buildUpdateQuery(movie *Movie, id string) (string, []any, error) {
 	statements := []string{}
 	params := []any{}
 	counter := 1
@@ -142,7 +146,16 @@ func (mdb MovieDatabase) buildUpdateQuery(movie *Movie, id string) (string, []an
 		addToQuery(movie.ReleaseYear, "release_year", &counter, &statements, &params)
 	}
 
-	if movie.Rating != *new(decimal.Decimal) {
+	ratingVal, err := movie.Rating.Value()
+	if err != nil {
+		return "", nil, err
+	}
+	zeroVal, err := new(decimal.Decimal).Value()
+	if err != nil {
+		return "", nil, err
+	}
+
+	if ratingVal != zeroVal {
 		addToQuery(movie.Rating, "rating", &counter, &statements, &params)
 	}
 
@@ -155,8 +168,8 @@ func (mdb MovieDatabase) buildUpdateQuery(movie *Movie, id string) (string, []an
 	}
 
 	params = append(params, id)
-	q := fmt.Sprintf("update movie set %s where id = $%d", strings.Join(statements, " "), counter)
-	return q, params
+	q := fmt.Sprintf("update movie set %s where id = $%d", strings.Join(statements, ", "), counter)
+	return q, params, nil
 }
 
 func addToQuery[T any](
